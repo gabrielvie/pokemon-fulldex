@@ -1,0 +1,64 @@
+# Fork only: the Android APK with direct-launch shortcuts. Takes upstream's newest android-* release APK, swaps in
+# this fork's Java code and manifest (tools/android/repack.sh), signs it with the key in the ANDROID_SIGNING_KEY
+# secret and publishes it as the "android-shortcuts" release. Run by hand (Actions tab) after upstream's release
+# changes or the fork's Java does; nothing else builds here.
+name: Android APK (shortcuts)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    env:
+      SDL_NAME: SDL2-2.32.10
+      SDL_SHA256: 5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android build-tools
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" "build-tools;34.0.0" "platforms;android-34" >/dev/null
+          echo "ANDROID_SDK=$SDK" >> "$GITHUB_ENV"
+      - name: SDL2 source (for its Java code)
+        run: |
+          curl -fsSL -o sdl.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/$SDL_NAME.tar.gz"
+          echo "$SDL_SHA256  sdl.tar.gz" | sha256sum -c --quiet
+          tar -xzf sdl.tar.gz
+          echo "SDL_SRC=$PWD/$SDL_NAME" >> "$GITHUB_ENV"
+      - name: Upstream's newest Android APK
+        run: |
+          tag=$(gh release list -R mamesj/pokemon-fulldex --limit 50 --json tagName,publishedAt \
+                  --jq '[.[]|select(.tagName|startswith("android"))]|sort_by(.publishedAt)|last|.tagName')
+          echo "upstream tag: $tag"
+          gh release download "$tag" -R mamesj/pokemon-fulldex -p '*.apk' -O upstream.apk
+          echo "UPSTREAM_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Signing key
+        env:
+          KEY_JSON: ${{ secrets.ANDROID_SIGNING_KEY }}
+        run: |
+          [ -n "$KEY_JSON" ] || { echo "::error::set the ANDROID_SIGNING_KEY secret (the key file's JSON)"; exit 1; }
+          printf '%s' "$KEY_JSON" > "$RUNNER_TEMP/key.json"
+          echo "SSR_ANDROID_KEY=$RUNNER_TEMP/key.json" >> "$GITHUB_ENV"
+      - name: Re-pack
+        run: tools/android/repack.sh upstream.apk pokemon-fulldex-shortcuts.apk "$GITHUB_RUN_NUMBER"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pokemon-fulldex-shortcuts-apk
+          path: pokemon-fulldex-shortcuts.apk
+      - name: Publish the android-shortcuts release
+        run: |
+          gh release view android-shortcuts >/dev/null 2>&1 || \
+            gh release create android-shortcuts --title "Android APK with shortcuts" \
+              --notes "Upstream's Android APK re-packed with direct-launch shortcuts (tools/android/repack.sh). Always the newest build."
+          gh release upload android-shortcuts pokemon-fulldex-shortcuts.apk --clobber
+          gh release edit android-shortcuts --notes "Built on $(date -u +%F) from upstream's $UPSTREAM_TAG with this fork's Java (tools/android/repack.sh). Always the newest build."
