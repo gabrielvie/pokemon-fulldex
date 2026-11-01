@@ -43,6 +43,14 @@ public class PinShortcutActivity extends Activity {
         Bitmap bmp = icon == null ? null : BitmapFactory.decodeFile(icon);
         if (bmp != null) b.setIcon(Icon.createWithBitmap(bmp));
         else b.setIcon(Icon.createWithResource(this, getApplicationInfo().icon));
-        sm.requestPinShortcut(b.build(), null);
+        ShortcutInfo info = b.build();
+        // Already on the home screen with this id: Android would show the old name and picture again, so the
+        // pinned one is updated in place (no prompt).
+        for (ShortcutInfo p : sm.getPinnedShortcuts())
+            if (p.getId().equals(info.getId())) {
+                sm.updateShortcuts(java.util.Collections.singletonList(info));
+                return;
+            }
+        sm.requestPinShortcut(info, null);
     }
 }
