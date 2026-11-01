@@ -49,8 +49,8 @@
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
         </activity>
-        <!-- Pins a launcher shortcut that starts one game: adb shell am start -n io.github.mamesj.pokemonds/.PinShortcutActivity
-             --es game IREO --es label "Pokemon Black" --es icon /sdcard/icon.png -->
+        <!-- Pins a launcher shortcut that starts one game (started by adb am start, with the extras game,
+             label and icon: the game code, the shortcut's name and a picture's path). -->
         <activity
             android:name=".PinShortcutActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
