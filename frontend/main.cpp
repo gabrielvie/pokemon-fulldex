@@ -1902,6 +1902,17 @@ int main(int argc, char** argv)
     SDL_Texture* overlayTex = nullptr;
     int overlayTexW = 0, overlayTexH = 0;
     SDL_AudioDeviceID audio = 0;
+    // A cushion of sound kept in the queue, in frames (0: none, as it always was). The sound is queued as each
+    // picture is shown, so a picture a few milliseconds late left the queue empty and the sound broke up. With a
+    // cushion the device starts once the queue holds it, a late picture takes from it instead, and a slow rate
+    // correction (where the queue is filled) keeps the clock of the frames and the sound card's from drifting
+    // apart. On Android by default; SSR_AUDIO_MS=60 (0 to turn it off) decides it elsewhere.
+    int audioCushion = 0;
+#ifdef __ANDROID__
+    audioCushion = 48000 * 60 / 1000;
+#endif
+    if (const char* ms = getenv("SSR_AUDIO_MS")) audioCushion = 48000 * std::max(0, std::min(500, atoi(ms))) / 1000;
+    bool audioRunning = true; // false while the device waits for its cushion
     Pads pads;
     Layout layout = LayoutFromName(cfg.layout);
     const uint8_t* singleScreenFlag = nullptr; // set by the ROM: nonzero while a scene needs both screens
@@ -2060,7 +2071,11 @@ int main(int argc, char** argv)
         want.channels = 2;
         want.samples = 1024;
         audio = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
-        if (audio) SDL_PauseAudioDevice(audio, 0);
+        if (audio)
+        {
+            audioRunning = audioCushion == 0;
+            if (audioRunning) SDL_PauseAudioDevice(audio, 0);
+        }
 
         // For bug reports about controllers: what SDL sees, and what may hide a device from it
         // (Steam sets these variables for the games it starts; a container may lack udev).
@@ -4246,6 +4261,10 @@ int main(int argc, char** argv)
     // Sound stretching for when the emulation runs slow (audiostretch.h).
     AudioStretch audioStretch;
     std::vector<int16_t> audioOut;
+    // The rate correction's own state (see audioCushion): a linear resampler that keeps its place between frames.
+    std::vector<int16_t> audioRes;
+    double audioPos = 0;
+    int16_t audioPrev[2] = {0, 0};
     uint64_t audioTick = 0;
     double audioSlow = 1.0;
     bool running = true;
@@ -6658,6 +6677,30 @@ int main(int argc, char** argv)
             if (audioStretch.Stretching() && speed == 1) slowdown *= 1.0 + 0.5 * (4800 - queued) / 4800.0;
             audioOut.clear();
             audioStretch.Process(audioBuf.data(), got, slowdown, audioOut);
+            if (audioCushion > 0 && speed == 1 && !audioStretch.Stretching() && !audioOut.empty())
+            {
+                // At full speed: the sound a touch faster when the queue is under its cushion, slower when over (at
+                // most 0.4%, about 7 cents: not heard), so that the queue holds its level whichever clock runs fast.
+                const double adj = std::max(-0.004, std::min(0.004, (double)(audioCushion - queued) / 96000.0));
+                const double step = 1.0 / (1.0 + adj);
+                const int n = (int)(audioOut.size() / 2);
+                audioRes.clear();
+                audioRes.reserve(audioOut.size() + 16);
+                auto at = [&](int i, int c) -> double { return i < 0 ? audioPrev[c] : audioOut[(size_t)i * 2 + c]; };
+                while (audioPos < n - 1)
+                {
+                    const int i0 = (int)std::floor(audioPos);
+                    const double f = audioPos - i0;
+                    for (int c = 0; c < 2; c++)
+                        audioRes.push_back((int16_t)std::lround(at(i0, c) + (at(i0 + 1, c) - at(i0, c)) * f));
+                    audioPos += step;
+                }
+                audioPos -= n;
+                audioPrev[0] = audioOut[(size_t)(n - 1) * 2];
+                audioPrev[1] = audioOut[(size_t)(n - 1) * 2 + 1];
+                audioOut.swap(audioRes);
+            }
+            else audioPos = 0;
             // VOLUME: scaled here, after the game's own mixing (silence at OFF, still queued, so
             // the timing the queue gives stays the same).
             if (cfg.volume < 100)
@@ -6665,6 +6708,25 @@ int main(int argc, char** argv)
             // Drop audio rather than let latency grow if the queue backs up.
             if (queued < 48000 / 4 && !audioOut.empty())
                 SDL_QueueAudio(audio, audioOut.data(), (Uint32)(audioOut.size() * 2));
+            if (audioCushion > 0 && !audioOut.empty())
+            {
+                // The device starts when the queue holds its cushion; if a long stall ran the queue dry it waits for
+                // the cushion again (one gap) instead of breaking up at every picture until the pictures catch up.
+                const int level = queued + (int)(audioOut.size() / 2);
+                if (!audioRunning)
+                {
+                    if (level >= audioCushion)
+                    {
+                        SDL_PauseAudioDevice(audio, 0);
+                        audioRunning = true;
+                    }
+                }
+                else if (queued < 64)
+                {
+                    SDL_PauseAudioDevice(audio, 1);
+                    audioRunning = false;
+                }
+            }
         }
         if (opt.audioStats && got > 0)
         {
