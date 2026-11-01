@@ -37,6 +37,16 @@ public class GameActivity extends SDLActivity {
         super.onCreate(state);
     }
 
+    // A launcher shortcut's "game" extra (PinShortcutActivity) is the game's four-letter code ("IREO"): the program
+    // gets "--game IREO", as the desktop shortcuts do, and starts that game at once, without the list.
+    @Override
+    protected String[] getArguments() {
+        Intent in = getIntent();
+        String game = in == null ? null : in.getStringExtra("game");
+        if (game != null && game.matches("[A-Za-z0-9]{4}")) return new String[] { "--game", game };
+        return super.getArguments();
+    }
+
     private static SharedPreferences prefs() {
         return self.getSharedPreferences("settings", MODE_PRIVATE);
     }

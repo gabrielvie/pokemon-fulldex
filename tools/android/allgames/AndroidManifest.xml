@@ -49,6 +49,13 @@
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
         </activity>
+        <!-- Pins a launcher shortcut that starts one game: adb shell am start -n io.github.mamesj.pokemonds/.PinShortcutActivity
+             --es game IREO --es label "Pokemon Black" --es icon /sdcard/icon.png -->
+        <activity
+            android:name=".PinShortcutActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:exported="true" />
         <activity
             android:name=".Restart"
             android:process=":restart"
