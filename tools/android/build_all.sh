@@ -108,8 +108,8 @@ if [ ! -f "$DEPS/$SDL_NAME/CMakeLists.txt" ]; then
     say "$SDL_NAME's source"
     mkdir -p "$DEPS"
     curl -fsSL -o "$DEPS/$SDL_NAME.tar.gz" "$SDL_URL"
-    # (macOS has no sha256sum: shasum does the same.)
-    echo "$SDL_SHA256  $DEPS/$SDL_NAME.tar.gz" | { if command -v sha256sum >/dev/null; then sha256sum -c --quiet; else shasum -a 256 -c --quiet; fi; } ||
+    # (macOS's own sha256sum has no -c: shasum, which it and most Linux systems have, does the same.)
+    echo "$SDL_SHA256  $DEPS/$SDL_NAME.tar.gz" | { if command -v shasum >/dev/null; then shasum -a 256 -c --quiet; else sha256sum -c --quiet; fi; } ||
         fail "SDL2's source does not match its checksum: $DEPS/$SDL_NAME.tar.gz"
     tar -xzf "$DEPS/$SDL_NAME.tar.gz" -C "$DEPS"
 fi
