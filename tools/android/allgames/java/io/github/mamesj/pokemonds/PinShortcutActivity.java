@@ -41,7 +41,8 @@ public class PinShortcutActivity extends Activity {
                 .setShortLabel(label == null || label.isEmpty() ? game : label)
                 .setIntent(start);
         Bitmap bmp = icon == null ? null : BitmapFactory.decodeFile(icon);
-        if (bmp != null) b.setIcon(Icon.createWithBitmap(bmp));
+        // Adaptive: the picture fills the launcher's tile (a plain bitmap is shrunk onto a white one).
+        if (bmp != null) b.setIcon(Icon.createWithAdaptiveBitmap(bmp));
         else b.setIcon(Icon.createWithResource(this, getApplicationInfo().icon));
         ShortcutInfo info = b.build();
         // Already on the home screen with this id: Android would show the old name and picture again, so the
