@@ -204,7 +204,8 @@ XML
 javac -nowarn --release 11 -cp "$JAR" -d "$W/classes" \
     $(find "$DEPS/$SDL_NAME/android-project/app/src/main/java" tools/android/allgames/java -name '*.java') 2>&1 | grep -v '^Note:' || true
 [ -f "$W/classes/io/github/mamesj/pokemonds/GameActivity.class" ] || fail "the app's Java code did not compile"
-"$BT/d8" --release --min-api 24 --lib "$JAR" --output "$W/dex" $(find "$W/classes" -name '*.class')
+# (SSR_D8: another d8, e.g. a newer build-tools': 34.0.0's crashes on the classes javac 21 or later writes.)
+"${SSR_D8:-$BT/d8}" --release --min-api 24 --lib "$JAR" --output "$W/dex" $(find "$W/classes" -name '*.class')
 (cd "$W/dex" && zip -q -X "$W/base.apk" classes.dex)
 
 say "Packing and signing the APK"
