@@ -200,7 +200,7 @@ cat > "$W/res/mipmap-anydpi-v26/ic_launcher.xml" <<'XML'
 XML
 "$BT/aapt2" compile --dir "$W/res" -o "$W/res.zip"
 "$BT/aapt2" link -o "$W/base.apk" -I "$JAR" --manifest tools/android/allgames/AndroidManifest.xml \
-    --min-sdk-version 24 --target-sdk-version 34 "$W/res.zip"
+    --min-sdk-version 24 --target-sdk-version 34 ${SSR_VERSION_CODE:+--version-code "$SSR_VERSION_CODE"} "$W/res.zip"
 javac -nowarn --release 11 -cp "$JAR" -d "$W/classes" \
     $(find "$DEPS/$SDL_NAME/android-project/app/src/main/java" tools/android/allgames/java -name '*.java') 2>&1 | grep -v '^Note:' || true
 [ -f "$W/classes/io/github/mamesj/pokemonds/GameActivity.class" ] || fail "the app's Java code did not compile"
