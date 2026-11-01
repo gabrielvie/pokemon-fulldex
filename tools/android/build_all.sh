@@ -108,12 +108,14 @@ if [ ! -f "$DEPS/$SDL_NAME/CMakeLists.txt" ]; then
     say "$SDL_NAME's source"
     mkdir -p "$DEPS"
     curl -fsSL -o "$DEPS/$SDL_NAME.tar.gz" "$SDL_URL"
-    echo "$SDL_SHA256  $DEPS/$SDL_NAME.tar.gz" | sha256sum -c --quiet ||
+    # (macOS has no sha256sum: shasum does the same.)
+    echo "$SDL_SHA256  $DEPS/$SDL_NAME.tar.gz" | { if command -v sha256sum >/dev/null; then sha256sum -c --quiet; else shasum -a 256 -c --quiet; fi; } ||
         fail "SDL2's source does not match its checksum: $DEPS/$SDL_NAME.tar.gz"
     tar -xzf "$DEPS/$SDL_NAME.tar.gz" -C "$DEPS"
 fi
 
-STRIP="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+case "$(uname -s)" in Darwin) HOST_TAG=darwin-x86_64 ;; *) HOST_TAG=linux-x86_64 ;; esac   # the NDK's own name for the building machine
+STRIP="$NDK/toolchains/llvm/prebuilt/$HOST_TAG/bin/llvm-strip"
 FILES=()
 for abi in $ABIS; do
     ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"
@@ -132,7 +134,9 @@ for abi in $ABIS; do
     cmake -S . -B "build-android-all-$abi" "${ARGS[@]}" -DSDL2_DIR="$SDL_PREFIX/lib/cmake/SDL2" \
         -DSSR_JIT=ON -DSSR_PC_ALL_GAMES=ON -DSSR_PNG=OFF -DSSR_GPU3D=OFF -DSSR_PORTABLE_X86=ON \
         -DSSR_GENERATED_DIR="$HERE/build-gen-tables" -DSSR_PC_ART="$ART" -DSSR_GBA_DIR="${SSR_GBA_DIR:-}" >/dev/null
-    ninja -C "build-android-all-$abi" ssrecomp
+    # SSR_JOBS: each job of the recompiled game code takes about 1.5 GB of memory, so on a small machine fewer than
+    # ninja's own choice (the processors + 2) keeps it from swapping.
+    ninja -j "${SSR_JOBS:-4}" -C "build-android-all-$abi" ssrecomp
     mkdir -p "build-android-dist/lib/$abi"
     "$STRIP" -o "build-android-dist/lib/$abi/libmain.so" "build-android-all-$abi/libmain.so"
     "$STRIP" -o "build-android-dist/lib/$abi/libSDL2.so" "$SDL_PREFIX/lib/libSDL2.so"
