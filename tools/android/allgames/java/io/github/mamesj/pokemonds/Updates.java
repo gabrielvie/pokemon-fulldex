@@ -194,7 +194,15 @@ final class Updates {
     // Network work never blocks the SDL or Android UI thread.
     // launch: only show a dialog when a new version is available (the list just opened).
     static void check(final Activity a) { check(a, false); }
+    // This fork's builds are signed with the fork's own key: the upstream release's APK is never installable over
+    // them (Android refuses a different signature) and its hash never matches, so the check would offer an update
+    // at every start. Set to true for a build that is the upstream's own.
+    private static final boolean UPSTREAM_UPDATES = false;
     static void check(final Activity a, final boolean launch) {
+        if (!UPSTREAM_UPDATES) {
+            if (!launch) say(a, "This is a fork build: it is updated from the fork's releases, not the upstream's.");
+            return;
+        }
         new Thread(() -> {
             try {
                 String list = releasesUrl(a);
