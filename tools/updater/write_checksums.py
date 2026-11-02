@@ -23,7 +23,11 @@ def write(directory, builds):
     for asset in sorted(directory.iterdir()):
         if not asset.is_file() or not asset.name.startswith('pokemon-ds-wide-'): continue
         if not asset.name.endswith(('.zip','.tar.gz','.AppImage','.apk','.ipa')): continue
-        digest=hashlib.file_digest(asset.open('rb'),'sha256').hexdigest()
+        # (hashlib.file_digest is Python 3.11+: macOS's own python3 is 3.9.)
+        h=hashlib.sha256()
+        with asset.open('rb') as f:
+            for block in iter(lambda: f.read(1<<20),b''): h.update(block)
+        digest=h.hexdigest()
         lines.append(digest+'  '+asset.name)
         epoch=supplied.get(asset.name)
         if epoch is None and previous.get(asset.name)==digest: epoch=versions.get(asset.name)
